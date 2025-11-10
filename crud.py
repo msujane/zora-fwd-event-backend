@@ -1,10 +1,11 @@
 
 from sqlalchemy.orm import Session
-import models, schemas
+import models , schemas
 import random
+from models import User
 
-# def get_user_by_email(db: Session, email: str):
-#     return db.query(models.User).filter(models.User.email == email).first()
+def get_user_by_email(db: Session, email: str):
+    return db.query(models.User).filter(models.User.email == email).first()
 
 def create_user(db: Session, user: schemas.UserCreate):
     db_user = models.User(**user.dict())
@@ -14,7 +15,7 @@ def create_user(db: Session, user: schemas.UserCreate):
     return db_user
 
 def is_admin(db, email: str):
-    user = db.query(models.User).filter(models.User.email == email, models.User.is_admin == True).first()
+    user = db.query(models.User).filter(models.User.email == email, models.User.is_admin == 1).first()
     return bool(user)
 
 def get_all_users(db):
@@ -59,8 +60,19 @@ def submit_feedback(db: Session, feedback: schemas.FeedbackCreate):
     db.refresh(db_feedback)
     return db_feedback
 
-def get_winners(db: Session, top_n: int = 3):
-    users = db.query(models.User).order_by(
-        models.User.score.desc(), models.User.time_taken
-    ).limit(top_n).all()
-    return users
+# def get_winners(db: Session, top_n: int = 3):
+#     users = db.query(models.User).order_by(
+#         models.User.score.desc(), models.User.time_taken
+#     ).limit(top_n).all()
+#     return users
+
+
+def get_top3_users(db: Session):
+    # Only users who have attempted the quiz (not admins)
+    users = db.query(User).filter(
+        User.has_attempted == True,
+        User.is_admin == False
+    ).order_by(User.score.desc(), User.time_taken.asc()).all()
+    if len(users) < 3:
+        return None  # Or you could raise a custom exception
+    return users[:3]

@@ -9,6 +9,8 @@ class UserCreate(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
+    is_admin: Optional[bool] = False
+
 
     @field_validator('email')
     def must_be_deloitte_email(cls, v):
@@ -31,7 +33,7 @@ class MiniUser(BaseModel):
     email: EmailStr
     score: int
     time_taken: int
-    passed: bool
+    
 
     class Config:
         orm_mode = True
@@ -50,6 +52,8 @@ class UserOut(BaseModel):
     phone: Optional[str] = None
     score: int
     time_taken: int
+    is_admin: Optional[bool] = False
+
     class Config:
         orm_mode = True
 

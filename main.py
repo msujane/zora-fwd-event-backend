@@ -24,6 +24,8 @@ def get_questions(db: Session = Depends(get_db)):
 # from database import engine, Base  # adjust imports if needed
 Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
+
+
 @app.post("/api/user/submit", response_model=schemas.UserOut)
 def submit_attempt(attempt: schemas.AttemptSubmission, db: Session = Depends(get_db)):
     user,error = crud.submit_attempt(db, attempt.email, attempt.answers, attempt.time_taken)
@@ -57,19 +59,33 @@ def admin_get_all_users(
             email=u.email,
             score=u.score,
             time_taken=u.time_taken,
-            passed=u.score >= 12    # Use your threshold
+               # Use your threshold
         ) for u in users
     ]
     return mini_users
 
-@app.get("/api/admin/poll_top3", response_model=schemas.AdminPollResult)
-def admin_poll_top_three(
-    admin_email: str = Query(...), db: Session = Depends(get_db)
-):
+# @app.get("/api/admin/poll_top3", response_model=schemas.AdminPollResult)
+# def admin_poll_top_three(
+#     admin_email: str = Query(...), db: Session = Depends(get_db)
+# ):
+#     if not crud.is_admin(db, admin_email):
+#         raise HTTPException(status_code=403, detail="Not authorized as admin")
+#     top_users = crud.get_top_n_users(db, 3)
+#     return schemas.AdminPollResult(
+#         names=[u.name for u in top_users],
+#         scores=[u.score for u in top_users]
+#     )
+
+@app.get("/api/admin/poll_top3")
+def admin_poll_top3(admin_email: str, db: Session = Depends(get_db)):
+    # Admin authentication logic here (ensure admin_email is admin)
+    # ... your is_admin check logic ...
     if not crud.is_admin(db, admin_email):
         raise HTTPException(status_code=403, detail="Not authorized as admin")
-    top_users = crud.get_top_n_users(db, 3)
-    return schemas.AdminPollResult(
-        names=[u.name for u in top_users],
-        scores=[u.score for u in top_users]
-    )
+    top_users = crud.get_top3_users(db)
+    if not top_users:
+        raise HTTPException(
+            status_code=400,
+            detail="At least 3 users must have attempted the quiz to display top 3 winners."
+        )
+    return top_users
