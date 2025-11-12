@@ -1,91 +1,84 @@
-# Authors : Ajinkya A, Subshree S
-
-from fastapi import FastAPI, Depends, HTTPException,Query
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-import crud, schemas, models
-from database import engine, get_db,Base
+from models import Base, User
+from database import engine, SessionLocal
+import crud
+from pydantic import BaseModel, EmailStr, Field
+from fastapi.middleware.cors import CORSMiddleware
+from schemas import UserResponseSchema
 from typing import List
 
-models.Base.metadata.create_all(bind=engine)
-
-app = FastAPI()
-
-@app.post("/api/user/register", response_model=schemas.UserOut)
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.create_user(db, user)
-    return db_user
-
-@app.get("/api/user/questions", response_model=List[schemas.QuestionOut])
-def get_questions(db: Session = Depends(get_db)):
-    questions = crud.get_random_questions(db, 5)
-    return questions
-
-
-# from database import engine, Base  # adjust imports if needed
-Base.metadata.drop_all(bind=engine)
 Base.metadata.create_all(bind=engine)
 
+app = FastAPI(
+    title="User Registration and Feedback API",
+    version="1.0.0"
+)
 
-@app.post("/api/user/submit", response_model=schemas.UserOut)
-def submit_attempt(attempt: schemas.AttemptSubmission, db: Session = Depends(get_db)):
-    user,error = crud.submit_attempt(db, attempt.email, attempt.answers, attempt.time_taken)
-    if user:
-        return user
-    else:
-        if error == "User not found":
-            raise HTTPException(status_code=404, detail=error)
-        else:
-            raise HTTPException(status_code=400, detail=error)
-# @app.post("/api/user/feedback", response_model=schemas.FeedbackOut)
-# def feedback(feedback: schemas.FeedbackCreate, db: Session = Depends(get_db)):
-#     return crud.submit_feedback(db, feedback)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# @app.get("/api/winners", response_model=List[schemas.WinnerOut])
-# def winners(db: Session = Depends(get_db)):
-#     return crud.get_winners(db)
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
+class RegistrationSchema(BaseModel):
+    name: str = Field(..., max_length=255)
+    email: EmailStr
+    phone: str = Field(None, max_length=20)
 
+class ScoreSchema(BaseModel):
+    email: EmailStr
+    score: float
 
-@app.get("/api/admin/users", response_model=List[schemas.MiniUser])
-def admin_get_all_users(
-    admin_email: str = Query(...), db: Session = Depends(get_db)
-):
-    if not crud.is_admin(db, admin_email):
-        raise HTTPException(status_code=403, detail="Not authorized as admin")
-    users = crud.get_all_users(db)
-    mini_users = [
-        schemas.MiniUser(
-            name=u.name,
-            email=u.email,
-            score=u.score,
-            time_taken=u.time_taken,
-               # Use your threshold
-        ) for u in users
-    ]
-    return mini_users
+class FeedbackSchema(BaseModel):
+    email: EmailStr
+    feedback: str = Field(..., max_length=2000)
 
-# @app.get("/api/admin/poll_top3", response_model=schemas.AdminPollResult)
-# def admin_poll_top_three(
-#     admin_email: str = Query(...), db: Session = Depends(get_db)
-# ):
-#     if not crud.is_admin(db, admin_email):
-#         raise HTTPException(status_code=403, detail="Not authorized as admin")
-#     top_users = crud.get_top_n_users(db, 3)
-#     return schemas.AdminPollResult(
-#         names=[u.name for u in top_users],
-#         scores=[u.score for u in top_users]
-#     )
+@app.post("/register", tags=["User"])
+def register(data: RegistrationSchema, db: Session = Depends(get_db)):
+    existing_user = db.query(User).filter(User.email == data.email).first()
+    if existing_user:
+        raise HTTPException(status_code=409, detail="User already registered with this email.")
+    user = crud.create_user(db, data.name, data.email, data.phone)
+    if not user:
+        raise HTTPException(status_code=500, detail="Could not create user")
+    return {"message": "User registered", "user_id": user.id}
 
-@app.get("/api/admin/poll_top3")
-def admin_poll_top3(admin_email: str, db: Session = Depends(get_db)):
-    # Admin authentication logic here (ensure admin_email is admin)
-    # ... your is_admin check logic ...
-    if not crud.is_admin(db, admin_email):
-        raise HTTPException(status_code=403, detail="Not authorized as admin")
-    top_users = crud.get_top3_users(db)
-    if not top_users:
-        raise HTTPException(
-            status_code=400,
-            detail="At least 3 users must have attempted the quiz to display top 3 winners."
-        )
-    return top_users
+@app.post("/submit-score", tags=["User"])
+def submit_score(data: ScoreSchema, db: Session = Depends(get_db)):
+    user = crud.update_user_score(db, data.email, data.score)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "Score saved", "user_id": user.id}
+
+@app.post("/submit-feedback", tags=["User"])
+def submit_feedback(data: FeedbackSchema, db: Session = Depends(get_db)):
+    user = crud.update_user_feedback(db, data.email, data.feedback)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "Feedback saved", "user_id": user.id}
+
+@app.get("/users", response_model=List[UserResponseSchema], tags=["Admin"])
+def get_all_users(db: Session = Depends(get_db)):
+    return db.query(User).all()
+
+@app.get("/winners", response_model=List[str], tags=["Admin"])
+def get_top_winners(db: Session = Depends(get_db)):
+    # Order by score DESC, then by created_at ASC (oldest first)
+    winners = (
+        db.query(User)
+        .filter(User.score != None)
+        .order_by(User.score.desc(), User.created_at.asc())
+        .limit(3)
+        .all()
+    )
+    return [user.name for user in winners]
