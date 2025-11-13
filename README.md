@@ -9,9 +9,6 @@ Requirements
 **Python 3.8+
 (Optional) SQLite DB**
 1. Create Project Folder and Clone Repo
-# Create your base folder and move into it
-- mkdir zora
-- cd zora
 
 # Clone the repository
 - git clone https://github.com/msujane/zora-fwd-event-backend.git
