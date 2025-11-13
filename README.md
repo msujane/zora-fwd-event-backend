@@ -1,6 +1,9 @@
 Backend: FastAPI (Python) for registration, quiz logic, scoring, and leaderboard.
 
 
+**Link for Frontend**
+https://github.com/msujane/zora-fwd-event.git
+
 Requirements
 **you have to install **
 **Python 3.8+
